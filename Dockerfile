@@ -1,45 +1,45 @@
-# ------------- Alpine Linux Base --------------------------
-# ────── Stage 1: Build all dependencies (Builder Stage) ──────
-FROM python:3.13.3-alpine3.21 AS builder
+ARG PYTHON_IMAGE=python:3.13-alpine
 
-# Install OS packages needed to compile some Python packages
+FROM ${PYTHON_IMAGE} AS builder
+
 RUN apk add --no-cache \
     build-base \
     libffi-dev \
-    openssl-dev \
-    musl-dev
+    openssl-dev
 
 WORKDIR /build
 
-# Copy requirements and install Python dependencies into a specific prefix
 COPY requirements.txt .
 RUN pip install \
     --prefix=/install \
     --no-cache-dir \
     -r requirements.txt
 
-# Copy your application code
 COPY app ./app
-# Compile Python code to .pyc files (optional, but can speed up app start)
 RUN python -m compileall -q app
 
-# ────── Stage 2: Runtime only (Final Stage) ──────
-FROM python:3.13.3-alpine3.21
+FROM ${PYTHON_IMAGE}
 
-# Install only the minimal runtime OS libraries needed
-# ffmpeg is included here as an example; only add what your app truly needs at runtime
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PORT=8000
+
 RUN apk add --no-cache \
     libffi \
     openssl \
-    ffmpeg
+    && addgroup -S app \
+    && adduser -S -G app app \
+    && mkdir -p /app/logs \
+    && chown app:app /app/logs
 
 WORKDIR /app
 
-# Copy the installed Python packages from the builder stage
 COPY --from=builder /install /usr/local
-# Copy the (compiled) application code from the builder stage
-COPY --from=builder /build/app ./app
+COPY --from=builder --chown=app:app /build/app ./app
+COPY --chown=app:app alembic.ini ./alembic.ini
+COPY --chown=app:app alembic ./alembic
 
-# Command to run the FastAPI app using Gunicorn
-# Cloud Run and similar platforms will set the $PORT environment variable.
-CMD exec gunicorn --bind :$PORT --workers 1 --worker-class uvicorn.workers.UvicornWorker -t 60 app.main:app
+EXPOSE 8000
+USER app
+
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 1 --worker-class uvicorn.workers.UvicornWorker --timeout 60 app.main:app"]

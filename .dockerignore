@@ -1,0 +1,49 @@
+# Secrets & cert
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+certbot/
+
+# Git & IDE
+.git
+.gitignore
+.vscode
+.idea
+
+# Python cache & build
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtualenv
+venv/
+.venv/
+env/
+
+# Test 
+tests/
+docs/
+*.md
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+nginx/
+
+# Log, data
+*.log
+logs/
+*.sqlite3
+.DS_Store
+Thumbs.db
