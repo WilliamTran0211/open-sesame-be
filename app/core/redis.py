@@ -1,17 +1,18 @@
 from typing import Optional
 
-from redis.asyncio import ConnectionPool, Redis
+from redis.asyncio import BlockingConnectionPool, Redis
 
 
 class RedisClient:
     def __init__(self, redis_url: str = "redis://localhost:6379/0"):
         self.redis_url = redis_url
-        self._pool: Optional[ConnectionPool] = None
+        self._pool: Optional[BlockingConnectionPool] = None
         self._client: Optional[Redis] = None
 
     async def connect(self) -> None:
-        self._pool = ConnectionPool.from_url(
-            self.redis_url, max_connections=20, decode_responses=True
+        # Blocking pool: khi hết connection thì chờ max timeout ms thay vì raise lỗi MaxConnectionsError
+        self._pool = BlockingConnectionPool.from_url(
+            self.redis_url, max_connections=50, timeout=5, decode_responses=True
         )
         self._client = Redis(connection_pool=self._pool)
 
