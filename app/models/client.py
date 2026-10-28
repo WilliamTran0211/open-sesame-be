@@ -1,7 +1,7 @@
 import uuid
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import ARRAY, Boolean, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import ARRAY, Boolean, Enum, ForeignKey, Integer, String, Text, false
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -52,6 +52,9 @@ class OAuthClient(UUIDMixin, TimestampMixin, Base):
     refresh_token_ttl: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_verified: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
     owner_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),

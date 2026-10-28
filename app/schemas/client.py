@@ -37,7 +37,6 @@ class CreateClientSchema(ClientBaseSchema):
 
 
 class UpdateClientSchema(BaseModel):
-
     name: Optional[str] = Field(default=None, max_length=255)
     redirect_uris: Optional[List[str]] = None
     grant_types: Optional[List[str]] = None
@@ -62,6 +61,7 @@ class ClientResponseSchema(BaseModel):
     is_active: bool
     owner_id: Optional[UUID]
     created_at: datetime
+    is_verified: bool
 
     model_config = {"from_attributes": True}
 
@@ -77,3 +77,15 @@ class RotateSecretResponseSchema(BaseModel):
     client_secret: str = Field(
         description="New plaintext client secret — shown only once."
     )
+
+
+class ClientPublicInfoSchema(BaseModel):
+    client_id: str
+    name: str
+    allowed_scopes: List[str]
+    is_verified: bool
+    redirect_uri_registered: Optional[bool] = None
+
+
+class VerifyClientSchema(BaseModel):
+    is_verified: bool

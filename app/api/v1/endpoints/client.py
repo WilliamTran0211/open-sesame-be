@@ -12,6 +12,7 @@ from app.schemas.client import (
     CreateClientSchema,
     RotateSecretResponseSchema,
     UpdateClientSchema,
+    VerifyClientSchema,
 )
 
 router = APIRouter()
@@ -34,7 +35,7 @@ async def get_list_all_clients(
 
 
 @router.get("/{client_id}", response_model=ClientResponseSchema)
-async def get_client_information(client: OwnedClientDep):
+async def get_owner_client_information(client: OwnedClientDep):
     return client
 
 
@@ -76,6 +77,18 @@ async def activate_client(
     client_services: OAuthClientServiceDep,
 ):
     return await client_services.activate_client(client.client_id)
+
+
+@router.patch("/{client_id}/verification", response_model=ClientResponseSchema)
+async def verify_client(
+    client_id: str,
+    body: VerifyClientSchema,
+    client_services: OAuthClientServiceDep,
+    _: RequireSuperuserDep,
+):
+    return await client_services.update_client(
+        client_id, {"is_verified": body.is_verified}
+    )
 
 
 @router.delete("/{client_id}", response_model=ClientResponseSchema)

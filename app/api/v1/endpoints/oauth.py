@@ -14,15 +14,17 @@ from app.api.deps import (
 from app.common.enum import ClientType
 from app.common.error_message import ErrorMessage
 from app.core.config import get_settings
+from app.core.deps import RedisDep
 from app.core.exception import (
     InvalidClientError,
     InvalidRequestError,
     InvalidScopeError,
+    NotFoundError,
     UnauthorizedClientError,
     UnauthorizedError,
 )
-from app.core.deps import RedisDep
-from app.core.rate_limit import record_auth_failure
+from app.core.rate_limit import rate_limit, record_auth_failure
+from app.schemas.client import ClientPublicInfoSchema
 from app.schemas.token import (
     AuthorizeQueryParams,
     ConsentRequest,
@@ -175,6 +177,33 @@ async def token_exchange(
         access_token=access_token,
         expires_in=expires_in,
         refresh_token=raw_refresh,
+    )
+
+
+@router.get(
+    "/clients/{client_id}",
+    response_model=ClientPublicInfoSchema,
+    dependencies=[rate_limit("client-info", limit=60, window_seconds=60)],
+)
+async def get_client_information(
+    client_id: str,
+    client_services: OAuthClientServiceDep,
+    redirect_uri: str | None = None,
+):
+    client = await client_services.get_client_by_id(client_id)
+    if not client.is_active:
+        raise NotFoundError(ErrorMessage.NOT_FOUND)
+    redirect_uri_registered = None
+    if redirect_uri is not None:
+        redirect_uri_registered = await client_services.validate_redirect_uri(
+            client, redirect_uri
+        )
+    return ClientPublicInfoSchema(
+        client_id=client.client_id,
+        name=client.name,
+        allowed_scopes=client.allowed_scopes,
+        is_verified=client.is_verified,
+        redirect_uri_registered=redirect_uri_registered,
     )
 
 
