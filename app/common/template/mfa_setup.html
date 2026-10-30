@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Confirm two-factor authentication</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f4f4f7; font-family: Arial, Helvetica, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f7; padding:32px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:8px; overflow:hidden;">
+          <tr>
+            <td style="background-color:#111827; padding:24px 32px;">
+              <span style="color:#ffffff; font-size:20px; font-weight:bold;">🔐 Open Sesame</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <h1 style="margin:0 0 16px; font-size:20px; color:#111827;">Turn on two-factor authentication</h1>
+              <p style="margin:0 0 24px; font-size:14px; line-height:1.5; color:#4b5563;">
+                You asked to protect your account with email-based two-factor authentication.
+                Enter the code below to confirm this email address and finish turning it on.
+                This code expires in 5 minutes.
+              </p>
+              <div style="text-align:center; margin:0 0 24px;">
+                <span style="display:inline-block; padding:12px 24px; font-size:28px; font-weight:bold; letter-spacing:4px; color:#111827; background-color:#f3f4f6; border-radius:6px;">
+                  {{ otp_code }}
+                </span>
+              </div>
+              <p style="margin:0 0 24px; font-size:14px; line-height:1.5; color:#4b5563;">
+                Once it's on, we'll email you a code like this each time you sign in.
+              </p>
+              <p style="margin:0; font-size:12px; line-height:1.5; color:#9ca3af;">
+                If you didn't request this, someone may have access to your account — change your password and review your active sessions.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

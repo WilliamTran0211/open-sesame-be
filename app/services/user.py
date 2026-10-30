@@ -219,7 +219,7 @@ class UserService:
         await self.repository.update(
             user.id, mfa_method=MFAMethod.EMAIL, mfa_secret=None
         )
-        await self._send_mfa_email_code(user)
+        await self._send_mfa_email_code(user, setup=True)
         return MfaSetupResult(method=MFAMethod.EMAIL)
 
     async def confirm_mfa(self, user_id: str, code: str) -> List[str]:
@@ -262,7 +262,8 @@ class UserService:
         user = await self.repository.get(user_id)
         if not user:
             raise NotFoundError(ErrorMessage.NOT_FOUND)
-        await self._send_mfa_email_code(user)
+        # Not enabled yet means this is a setup-confirmation resend.
+        await self._send_mfa_email_code(user, setup=not user.mfa_enabled)
 
     async def verify_mfa_code(self, user: User, code: str) -> bool:
         if await self._verify_active_method_code(user, code):
@@ -290,11 +291,15 @@ class UserService:
             )
         return False
 
-    async def _send_mfa_email_code(self, user: User) -> None:
+    async def _send_mfa_email_code(self, user: User, setup: bool = False) -> None:
         otp_code = await self._otp_services.generate(
             user.id, purpose=VerificationPurpose.TWO_FACTOR_AUTH
         )
-        if self._email_services:
+        if not self._email_services:
+            return
+        if setup:
+            await self._email_services.send_mfa_setup_code(user.email, otp_code)
+        else:
             await self._email_services.send_mfa_code(user.email, otp_code)
 
     async def change_password(

@@ -127,3 +127,11 @@ class EmailServices:
             html_template="mfa_code.html",
             template_body={"otp_code": otp_code},
         )
+
+    async def send_mfa_setup_code(self, email_to: str, otp_code: str) -> None:
+        await self.send_email(
+            email_to=email_to,
+            subject="Confirm two-factor authentication for Open Sesame",
+            html_template="mfa_setup.html",
+            template_body={"otp_code": otp_code},
+        )
