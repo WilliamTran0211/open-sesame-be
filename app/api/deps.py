@@ -14,6 +14,7 @@ from app.services.access_token import TokenService, get_token_service
 from app.services.auth import AuthService
 from app.services.client import OAuthClientService
 from app.services.email import EmailServices
+from app.services.mfa import MfaService
 from app.services.oauth_consent import OAuthConsentService
 from app.services.otp import OTPService
 from app.services.refresh_token import RefreshTokenServices
@@ -38,6 +39,15 @@ def get_user_services(
     return UserService(db, otp_service, email_service)
 
 
+def get_mfa_services(
+    db: DBDep,
+    redis_client: RedisDep,
+    otp_service: Annotated[OTPService, Depends(get_otp_service)],
+    email_service: Annotated[EmailServices, Depends(get_email_services)],
+) -> MfaService:
+    return MfaService(db, redis_client, otp_service, email_service)
+
+
 def get_user_session_services(
     db: DBDep,
     redis_client: RedisDep,
@@ -53,6 +63,7 @@ def get_auth_services(
     db: DBDep,
     redis_client: RedisDep,
     user_services: Annotated[UserService, Depends(get_user_services)],
+    mfa_services: Annotated[MfaService, Depends(get_mfa_services)],
     token_services: Annotated[
         RefreshTokenServices, Depends(get_refresh_token_services)
     ],
@@ -61,8 +72,8 @@ def get_auth_services(
     session_services = UserSessionService(db, redis_client)
     return AuthService(
         db,
-        redis_client,
         user_services,
+        mfa_services,
         session_services,
         token_services,
         access_token_service,
@@ -153,6 +164,7 @@ async def get_owned_client(
 OtpServicesDep = Annotated[OTPService, Depends(get_otp_service)]
 EmailServicesDep = Annotated[EmailServices, Depends(get_email_services)]
 UserServicesDep = Annotated[UserService, Depends(get_user_services)]
+MfaServicesDep = Annotated[MfaService, Depends(get_mfa_services)]
 
 AuthServicesDep = Annotated[AuthService, Depends(get_auth_services)]
 UserSessionServicesDep = Annotated[

@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 from uuid import UUID
@@ -11,40 +10,31 @@ from app.core.exception import (
     EmailNotVerifiedError,
     InvalidGrantError,
     InvalidRequestError,
-    ValidationError,
 )
-from app.core.redis import RedisClient
 from app.core.security import SecurityHelper, TokenHelper
 from app.models.client import OAuthClient
 from app.models.user import User
 from app.models.user_session import UserSession
 from app.repository.authorization_code import AuthorizationCodeRepository
 from app.services.access_token import TokenService
+from app.services.mfa import MfaChallenge, MfaService
 from app.services.refresh_token import RefreshTokenServices
 from app.services.user import UserService
 from app.services.user_session import UserSessionService
-
-MFA_CHALLENGE_TTL = 300  # 5 minutes
-MFA_CHALLENGE_MAX_ATTEMPTS = 5
-
-
-@dataclass
-class MfaChallenge:
-    challenge_id: str
 
 
 class AuthService:
     def __init__(
         self,
         db: AsyncSession,
-        redis_client: RedisClient,
         user_services: UserService,
+        mfa_services: MfaService,
         session_services: UserSessionService,
         token_services: RefreshTokenServices,
         access_token_service: TokenService,
     ):
-        self.redis_client = redis_client
         self.user_services = user_services
+        self.mfa_services = mfa_services
         self.session_services = session_services
         self.token_services = token_services
         self.access_token_service = access_token_service
@@ -58,57 +48,25 @@ class AuthService:
         if not user.is_verified:
             raise EmailNotVerifiedError(ErrorMessage.EMAIL_NOT_VERIFIED)
 
-        if user.mfa_enabled:
-            await self.user_services.send_mfa_code_if_email(user)
-            return await self._create_mfa_challenge(user.id, ip_address, user_agent)
+        challenge = await self.mfa_services.start_login_challenge(
+            user, ip_address, user_agent
+        )
+        if challenge:
+            return challenge
 
         session = await self.session_services.create_session(
             user.id, ip_address, user_agent
         )
         return user, session
-
-    async def _create_mfa_challenge(
-        self, user_id: UUID, ip_address: str, user_agent: str
-    ) -> MfaChallenge:
-        challenge_id = TokenHelper.generate()
-        await self.redis_client.setex(
-            f"mfa_challenge:{challenge_id}",
-            MFA_CHALLENGE_TTL,
-            f"{user_id}|{ip_address}|{user_agent}",
-        )
-        return MfaChallenge(challenge_id=challenge_id)
 
     async def complete_mfa_challenge(
         self, challenge_id: str, code: str
     ) -> tuple[User, UserSession]:
-        key = f"mfa_challenge:{challenge_id}"
-        attempts_key = f"mfa_challenge_attempts:{challenge_id}"
-
-        raw = await self.redis_client.get(key)
-        if not raw:
-            raise InvalidGrantError(ErrorMessage.MFA_CHALLENGE_EXPIRED)
-
-        attempts = await self.redis_client.incr(attempts_key)
-        if attempts == 1:
-            await self.redis_client.expire(attempts_key, MFA_CHALLENGE_TTL)
-        if attempts > MFA_CHALLENGE_MAX_ATTEMPTS:
-            await self.redis_client.delete(key)
-            await self.redis_client.delete(attempts_key)
-            raise InvalidGrantError(ErrorMessage.MFA_CHALLENGE_EXPIRED)
-
-        user_id_str, ip_address, user_agent = raw.split("|", 2)
-        user = await self.user_services.get_active_user(UUID(user_id_str))
-
-        if not await self.user_services.verify_mfa_code(user, code):
-            raise ValidationError(ErrorMessage.INVALID_MFA_CODE)
-
-        await self.redis_client.delete(key)
-        await self.redis_client.delete(attempts_key)
-
+        passed = await self.mfa_services.verify_challenge(challenge_id, code)
         session = await self.session_services.create_session(
-            user.id, ip_address, user_agent
+            passed.user.id, passed.ip_address, passed.user_agent
         )
-        return user, session
+        return passed.user, session
 
     async def logout(self, session_id: str) -> None:
         await self.session_services.terminate_session(session_id)
