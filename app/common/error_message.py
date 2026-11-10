@@ -27,6 +27,8 @@ class ErrorMessage(str, Enum):
     MFA_ALREADY_ENABLED = "Two-factor authentication is already enabled"
     MFA_NOT_ENABLED = "Two-factor authentication is not enabled"
     MFA_SETUP_NOT_STARTED = "Start 2FA setup first"
+    MFA_METHOD_ALREADY_ENABLED = "This two-factor method is already enabled"
+    MFA_METHOD_NOT_ENABLED = "This two-factor method is not enabled"
     INVALID_MFA_CODE = "Invalid authentication code"
     MFA_CHALLENGE_EXPIRED = "Login challenge expired or invalid — please log in again"
 
