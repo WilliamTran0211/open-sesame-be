@@ -1,10 +1,9 @@
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.enum import MFAMethod, VerificationPurpose
+from app.common.enum import VerificationPurpose
 from app.common.error_message import ErrorMessage
 from app.core import security
 from app.core.exception import (
@@ -18,15 +17,7 @@ from app.models.user import User
 from app.repository.user import UserRepository
 from app.schemas.user import CreateUserSchema, UpdateUserSchema
 from app.services.email import EmailServices
-from app.services.mfa import MFAService
 from app.services.otp import OTPService
-
-
-@dataclass
-class MfaSetupResult:
-    method: MFAMethod
-    secret: Optional[str] = None
-    provisioning_uri: Optional[str] = None
 
 
 class UserService:
@@ -143,11 +134,6 @@ class UserService:
 
     async def resend_verification(self, email: str) -> None:
         user = await self.repository.get_by_email(email.lower())
-
-        # Stay silent for unknown or already-verified emails to avoid leaking accounts.
-        # EmailServices backgrounds the actual SMTP call, so this branch and the
-        # early-return above take the same time — otherwise awaiting SMTP here is
-        # a timing side-channel that lets a caller tell real emails from unknown ones.
         if not user or user.is_verified:
             return
 
@@ -197,105 +183,6 @@ class UserService:
 
         pwd_hash = security.PasswordHelper.hash(new_password)
         return await self.repository.update(user.id, hashed_password=pwd_hash)
-
-    async def setup_mfa(self, user_id: str, method: MFAMethod) -> MfaSetupResult:
-        user = await self.repository.get(user_id)
-        if not user:
-            raise NotFoundError(ErrorMessage.NOT_FOUND)
-        if user.mfa_enabled:
-            raise ConflictError(ErrorMessage.MFA_ALREADY_ENABLED)
-
-        if method == MFAMethod.TOTP:
-            secret = MFAService.generate_secret()
-            await self.repository.update(
-                user.id, mfa_method=MFAMethod.TOTP, mfa_secret=secret
-            )
-            provisioning_uri = MFAService.get_provisioning_uri(user.email, secret)
-            return MfaSetupResult(
-                method=MFAMethod.TOTP, secret=secret, provisioning_uri=provisioning_uri
-            )
-
-        # EMAIL
-        await self.repository.update(
-            user.id, mfa_method=MFAMethod.EMAIL, mfa_secret=None
-        )
-        await self._send_mfa_email_code(user)
-        return MfaSetupResult(method=MFAMethod.EMAIL)
-
-    async def confirm_mfa(self, user_id: str, code: str) -> List[str]:
-        user = await self.repository.get(user_id)
-        if not user:
-            raise NotFoundError(ErrorMessage.NOT_FOUND)
-        if user.mfa_enabled:
-            raise ConflictError(ErrorMessage.MFA_ALREADY_ENABLED)
-        if not user.mfa_method:
-            raise ValidationError(ErrorMessage.MFA_SETUP_NOT_STARTED)
-        if not await self._verify_active_method_code(user, code):
-            raise ValidationError(ErrorMessage.INVALID_MFA_CODE)
-
-        raw_codes, hashes = MFAService.generate_recovery_codes()
-        await self.repository.update(
-            user.id, mfa_enabled=True, mfa_recovery_codes=hashes
-        )
-        return raw_codes
-
-    async def disable_mfa(self, user_id: str, code: str) -> None:
-        user = await self.repository.get(user_id)
-        if not user:
-            raise NotFoundError(ErrorMessage.NOT_FOUND)
-        if not user.mfa_enabled:
-            raise ValidationError(ErrorMessage.MFA_NOT_ENABLED)
-        if not await self.verify_mfa_code(user, code):
-            raise ValidationError(ErrorMessage.INVALID_MFA_CODE)
-
-        await self.repository.update(
-            user.id,
-            mfa_enabled=False,
-            mfa_method=None,
-            mfa_secret=None,
-            mfa_recovery_codes=[],
-        )
-
-    async def request_mfa_code(self, user_id: str) -> None:
-        """Send a fresh email OTP — used for EMAIL-method setup confirmation
-        resends and before disabling EMAIL-method MFA. No-op for TOTP."""
-        user = await self.repository.get(user_id)
-        if not user:
-            raise NotFoundError(ErrorMessage.NOT_FOUND)
-        await self._send_mfa_email_code(user)
-
-    async def verify_mfa_code(self, user: User, code: str) -> bool:
-        if await self._verify_active_method_code(user, code):
-            return True
-
-        remaining = MFAService.consume_recovery_code(user.mfa_recovery_codes, code)
-        if remaining is not None:
-            await self.repository.update(user.id, mfa_recovery_codes=remaining)
-            return True
-
-        return False
-
-    async def send_mfa_code_if_email(self, user: User) -> None:
-        """Called on login once an MFA challenge is created — no-op for TOTP,
-        since the authenticator app already has the code offline."""
-        if user.mfa_method == MFAMethod.EMAIL:
-            await self._send_mfa_email_code(user)
-
-    async def _verify_active_method_code(self, user: User, code: str) -> bool:
-        if user.mfa_method == MFAMethod.TOTP:
-            return MFAService.verify_code(user.mfa_secret, code)
-        if user.mfa_method == MFAMethod.EMAIL:
-            return await self._otp_services.verify(
-                user.id, VerificationPurpose.TWO_FACTOR_AUTH, code
-            )
-        return False
-
-    async def _send_mfa_email_code(self, user: User) -> None:
-        otp_code = await self._otp_services.generate(
-            user.id, purpose=VerificationPurpose.TWO_FACTOR_AUTH
-        )
-        if self._email_services:
-            await self._email_services.send_mfa_code(user.email, otp_code)
 
     async def change_password(
         self, user_id: str, current_password: str, new_password: str

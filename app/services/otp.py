@@ -10,10 +10,12 @@ class OTPService:
         self.ttl = 300
         self.max_attempts = 5
 
-    async def generate(self, user_id: str, purpose: VerificationPurpose) -> str:
+    async def generate(
+        self, user_id: str, purpose: VerificationPurpose, ttl: int | None = None
+    ) -> str:
         otp = f"{secrets.randbelow(1000000):06d}"
         key = f"otp:{purpose}:{user_id}"
-        await self.redis.setex(key, self.ttl, otp)
+        await self.redis.setex(key, ttl or self.ttl, otp)
         await self.redis.delete(f"otp:attempts:{purpose}:{user_id}")
 
         return otp

@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class UserSchemaBase(BaseModel):
@@ -18,7 +18,6 @@ class UserResponseSchema(BaseModel):
     is_active: bool
     is_verified: bool
     is_superuser: bool
-    mfa_enabled: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}

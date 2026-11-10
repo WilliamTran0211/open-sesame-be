@@ -5,6 +5,7 @@ from app.models.oauth_consent import OAuthConsent
 from app.models.refresh_token import RefreshToken
 from app.models.scope import Scope
 from app.models.user import User
+from app.models.user_mfa_method import UserMfaMethod
 from app.models.user_session import UserSession
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "RefreshToken",
     "Scope",
     "OAuthConsent",
+    "UserMfaMethod",
 ]

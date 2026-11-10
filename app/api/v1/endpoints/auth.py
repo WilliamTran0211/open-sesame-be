@@ -1,17 +1,21 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Request, Response
+from fastapi import APIRouter, Cookie, Request, Response, status
 
-from app.api.deps import AuthServicesDep, RequireSessionDep
+from app.api.deps import AuthServicesDep, MfaServicesDep, RequireSessionDep
 from app.common.error_message import ErrorMessage
 from app.core.rate_limit import rate_limit
 from app.core.config import get_settings
 from app.core.exception import ForbiddenError
-from app.schemas.mfa import MfaChallengeResponseSchema, MfaVerifySchema
+from app.schemas.mfa import (
+    MfaChallengeEmailSchema,
+    MfaChallengeResponseSchema,
+    MfaVerifySchema,
+)
 from app.schemas.session import SessionResponseSchema
 from app.schemas.user import UserLogin, UserResponseSchema
-from app.services.auth import MfaChallenge
+from app.services.mfa import MfaChallenge
 
 router = APIRouter()
 
@@ -54,7 +58,11 @@ async def login(
     result = await auth_service.login(**data)
 
     if isinstance(result, MfaChallenge):
-        return MfaChallengeResponseSchema(challenge_id=result.challenge_id)
+        return MfaChallengeResponseSchema(
+            challenge_id=result.challenge_id,
+            mfa_method=result.mfa_method,
+            mfa_methods=result.mfa_methods,
+        )
 
     user, session = result
     _set_session_cookie(response, session.session_id)
@@ -75,6 +83,25 @@ async def login_2fa(
     )
     _set_session_cookie(response, session.session_id)
     return UserResponseSchema.model_validate(user)
+
+
+@router.post(
+    "/login/2fa/email",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[
+        rate_limit(
+            "login-2fa-email",
+            identifier_field="challenge_id",
+            limit=3,
+            window_seconds=300,
+        )
+    ],
+)
+async def login_2fa_email(
+    body: MfaChallengeEmailSchema,
+    mfa_services: MfaServicesDep,
+):
+    await mfa_services.send_challenge_email(body.challenge_id)
 
 
 @router.post("/logout")

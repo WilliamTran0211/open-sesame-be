@@ -5,11 +5,14 @@ import hashlib
 import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import jwt
+import pyotp
 from cryptography.fernet import Fernet
 from passlib.context import CryptContext
+
+RECOVERY_CODE_COUNT = 8
 
 
 class PasswordHelper:
@@ -96,3 +99,37 @@ class SecurityHelper:
         digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
         computed_challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
         return hmac.compare_digest(computed_challenge, code_challenge)
+
+
+class TotpHelper:
+    @staticmethod
+    def generate_secret() -> str:
+        return pyotp.random_base32()
+
+    @staticmethod
+    def get_provisioning_uri(email: str, secret: str, issuer: str) -> str:
+        return pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name=issuer)
+
+    @staticmethod
+    def verify_code(secret: str, code: str) -> bool:
+        return pyotp.TOTP(secret).verify(code, valid_window=1)
+
+
+class RecoveryCodeHelper:
+    @staticmethod
+    def generate() -> Tuple[List[str], List[str]]:
+        """Returns (raw codes to show the user, hashes to store)."""
+        raw_codes = [TokenHelper.generate()[:10] for _ in range(RECOVERY_CODE_COUNT)]
+        hashes = [TokenHelper.hash(code) for code in raw_codes]
+        return raw_codes, hashes
+
+    @staticmethod
+    def consume(stored_hashes: List[str], code: str) -> List[str] | None:
+        """Returns the hash list with the matching code removed, or None if
+        the code didn't match any stored hash."""
+        code_hash = TokenHelper.hash(code)
+        if code_hash not in stored_hashes:
+            return None
+        remaining = list(stored_hashes)
+        remaining.remove(code_hash)
+        return remaining
